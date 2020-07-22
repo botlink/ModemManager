@@ -2834,6 +2834,46 @@ mm_3gpp_parse_cscs_test_response (const gchar *reply,
 /*************************************************************************/
 
 gboolean
+mm_3gpp_parse_cgpaddr_write_response (const gchar *reply,
+                                      guint *cid,
+                                      gchar **ipv4addr,
+                                      gchar **ipv6addr)
+{
+    GRegex *r;
+    GMatchInfo *match_info;
+    gboolean success = FALSE;
+
+    g_return_val_if_fail (reply != NULL, FALSE);
+    g_return_val_if_fail (cid != NULL, FALSE);
+    g_return_val_if_fail (ipv4addr != NULL, FALSE);
+    g_return_val_if_fail (ipv6addr != NULL, FALSE);
+
+
+    r = g_regex_new ("\\+CGPADDR:\\s*(\\d+)\\s*,(\"([^\"]*)\"),*(\"([^\"]*)\")*",
+                     G_REGEX_OPTIMIZE | G_REGEX_RAW,
+                     0, NULL);
+    g_assert (r != NULL);
+
+    if (g_regex_match (r, reply, 0, &match_info)) {
+        if (mm_get_uint_from_match_info (match_info, 1, cid) &&
+            (*ipv4addr = mm_get_string_unquoted_from_match_info (match_info, 3)) != NULL)
+            success = TRUE;
+        if (mm_get_uint_from_match_info (match_info, 1, cid) &&
+                    (*ipv6addr = mm_get_string_unquoted_from_match_info (match_info, 5)) != NULL)
+                    success = TRUE;
+        mm_dbg("Parsed ipv4 addr: %s", *ipv4addr);
+        mm_dbg("Parsed ipv6 addr: %s", *ipv6addr);
+
+    }
+    g_match_info_free (match_info);
+    g_regex_unref (r);
+
+    return success;
+}
+
+/*************************************************************************/
+
+gboolean
 mm_3gpp_parse_clck_test_response (const gchar *reply,
                                   MMModem3gppFacility *out_facilities)
 {
