@@ -252,6 +252,13 @@ gboolean mm_3gpp_get_cpms_storage_match (GMatchInfo *match_info,
 gboolean mm_3gpp_parse_cscs_test_response (const gchar *reply,
                                            MMModemCharset *out_charsets);
 
+/* AT+CGPADDR=X (IP address) response parser */
+gboolean mm_3gpp_parse_cgpaddr_write_response (const gchar *reply,
+                                               gpointer log_object,
+                                               guint *cid,
+                                               gchar **ipv4addr,
+                                               gchar **ipv6addr);
+
 /* AT+CLCK=? (Supported locks) response parser */
 gboolean mm_3gpp_parse_clck_test_response (const gchar *reply,
                                            MMModem3gppFacility *out_facilities);

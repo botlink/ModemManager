@@ -395,6 +395,8 @@ libmm_shared_telit_la_SOURCES = \
 	telit/mm-broadband-modem-telit.h \
 	telit/mm-broadband-modem-le910c4-telit.c \
 	telit/mm-broadband-modem-le910c4-telit.h \
+	telit/mm-broadband-bearer-telit-ncm.c \
+	telit/mm-broadband-bearer-telit-ncm.h \
 	$(NULL)
 if WITH_MBIM
 libmm_shared_telit_la_SOURCES += \

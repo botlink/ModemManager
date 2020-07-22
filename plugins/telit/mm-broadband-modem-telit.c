@@ -32,6 +32,8 @@
 #include "mm-iface-modem-3gpp.h"
 #include "mm-iface-modem-location.h"
 #include "mm-broadband-modem-telit.h"
+#include "mm-broadband-bearer.h"
+#include "mm-broadband-bearer-telit-ncm.h"
 #include "mm-modem-helpers-telit.h"
 #include "mm-telit-enums-types.h"
 #include "mm-shared-telit.h"
@@ -1377,10 +1379,72 @@ mm_broadband_modem_telit_init (MMBroadbandModemTelit *self)
 }
 
 static void
+broadband_bearer_new_ready (GObject *source,
+                            GAsyncResult *res,
+                            GTask *task)
+{
+    MMBaseBearer *bearer = NULL;
+    GError *error = NULL;
+
+    bearer = mm_broadband_bearer_new_finish (res, &error);
+    if (!bearer)
+        g_task_return_error (task, error);
+    else
+        g_task_return_pointer (task, bearer, g_object_unref);
+    g_object_unref (task);
+}
+
+static void
+modem_create_bearer (MMIfaceModem *self,
+                     MMBearerProperties *properties,
+                     GAsyncReadyCallback callback,
+                     gpointer user_data)
+{
+    const gchar **drivers;
+    guint i;
+    gboolean is_ncm = FALSE;
+    GTask *task;
+
+    /* We want to use a different bearer object if the cdc_ncm driver is being
+     * used.
+     */
+    drivers = mm_base_modem_get_drivers (MM_BASE_MODEM (self));
+    for (i = 0; drivers[i]; i++) {
+        if (g_str_equal (drivers[i], "cdc_ncm")) {
+            mm_obj_dbg (self, "Telit modem supports ncm");
+            is_ncm = TRUE;
+            break;
+        }
+    }
+
+    task = g_task_new (self, NULL, callback, user_data);
+
+    if (is_ncm) {
+        mm_obj_dbg (self, "Creating ncm bearer for Telit modem");
+        mm_broadband_bearer_telit_ncm_new (MM_BROADBAND_MODEM_TELIT (self),
+                                           properties,
+                                           NULL, /* cancellable */
+                                           (GAsyncReadyCallback)broadband_bearer_new_ready,
+                                           task);
+    }
+    else {
+        /* We just create a MMBroadbandBearer */
+        mm_obj_dbg (self, "Creating Broadband bearer in broadband modem");
+        mm_broadband_bearer_new (MM_BROADBAND_MODEM (self),
+                                 properties,
+                                 NULL, /* cancellable */
+                                 (GAsyncReadyCallback)broadband_bearer_new_ready,
+                                 task);
+    }
+
+}
+
+static void
 iface_modem_init (MMIfaceModem *iface)
 {
     iface_modem_parent = g_type_interface_peek_parent (iface);
 
+    iface->create_bearer = modem_create_bearer;
     iface->set_current_bands = set_current_bands;
     iface->set_current_bands_finish = mm_shared_telit_modem_set_current_bands_finish;
     iface->load_current_bands = mm_shared_telit_modem_load_current_bands;
