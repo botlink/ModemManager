@@ -116,4 +116,10 @@ typedef enum { /*< underscore_name=mm_telit_csim_lock_state >*/
 
 GArray *mm_telit_build_modes_list (void);
 
+gboolean
+mm_telit_parse_fwswitch_response (const gchar *response,
+                                  gint *firmware_index,
+                                  gint *storage_type,
+                                  GError **error);
+
 #endif  /* MM_MODEM_HELPERS_TELIT_H */
