@@ -589,3 +589,17 @@ mm_telit_build_modes_list (void)
 
     return combinations;
 }
+
+gboolean
+mm_telit_parse_fwswitch_response (const gchar *response,
+                                  gint *firmware_index,
+                                  gint *storage_type,
+                                  GError **error)
+{
+    if (sscanf (response, "#FWSWITCH: %d,%d", firmware_index, storage_type) != 2) {
+        g_set_error (error, MM_CORE_ERROR, MM_CORE_ERROR_FAILED,
+                     "Could not parse \"#FWSWITCH?\" response: %s", response);
+        return FALSE;
+    }
+    return TRUE;
+}
