@@ -37,52 +37,6 @@
 G_DEFINE_TYPE (MMBroadbandBearerTelitNcm, mm_broadband_bearer_telit_ncm, MM_TYPE_BROADBAND_BEARER)
 
 /*****************************************************************************/
-/* WWAN interface mapping */
-
-/* Map CDC-NCM port index to USB interface number */
-static const guint usb_ncm_configs[] = { 0x06, 0x08, 0x0a, 0x0c };
-
-/* Map CDC-ACM port index to USB interface number */
-static const guint usb_acm_configs[] = { 0x00, 0xFF, 0x04 };
-
-static gint
-get_usb_ncm_config_index (MMPort  *data,
-                          GError  **error)
-{
-    guint usb_iface_num;
-    guint i;
-
-    usb_iface_num = mm_kernel_device_get_property_as_int_hex (mm_port_peek_kernel_device (data), "ID_USB_INTERFACE_NUM");
-
-    for (i = 0; i < G_N_ELEMENTS (usb_ncm_configs); i++) {
-        if (usb_ncm_configs[i] == usb_iface_num)
-            return (gint) i;
-    }
-
-    g_set_error (error, MM_CORE_ERROR, MM_CORE_ERROR_FAILED,
-                 "Unsupported WWAN interface: unexpected interface number: 0x%02x", usb_iface_num);
-    return -1;
-}
-
-static gint
-get_usb_acm_config_index (MMPortSerialAt  *port,
-                          GError          **error)
-{
-    guint usb_iface_num;
-    guint i;
-
-    usb_iface_num = mm_kernel_device_get_property_as_int_hex (mm_port_peek_kernel_device (&port->parent.parent), "ID_USB_INTERFACE_NUM");
-    for (i = 0; i < G_N_ELEMENTS (usb_acm_configs); i++) {
-        if (usb_acm_configs[i] == usb_iface_num)
-            return (gint) i;
-    }
-
-    g_set_error (error, MM_CORE_ERROR, MM_CORE_ERROR_FAILED,
-                 "Unsupported ACM interface: unexpected interface number: 0x%02x", usb_iface_num);
-    return -1;
-}
-
-/*****************************************************************************/
 /* 3GPP Dialing (sub-step of the 3GPP Connection sequence) */
 
 typedef enum {
@@ -101,8 +55,6 @@ typedef struct {
     guint                       cid;
     MMBearerIpFamily            ip_family;
     MMPort                      *data;
-    gint                        usb_interface_config_index;
-    gint                        usb_acm_config_index;
     GPtrArray *                 creg_regexes;
     Dial3gppContextStep         step;
 } Dial3gppContext;
@@ -250,7 +202,6 @@ dial_3gpp (MMBroadbandBearer *self,
 {
     GTask               *task;
     Dial3gppContext     *ctx;
-    GError              *error = NULL;
 
     g_assert (primary != NULL);
 
@@ -278,16 +229,6 @@ dial_3gpp (MMBroadbandBearer *self,
     g_object_ref (ctx->data);
 
     ctx->secondary = mm_base_modem_get_port_secondary (MM_BASE_MODEM (modem));
-
-    /* Validate the USB configuration */
-    ctx->usb_interface_config_index = get_usb_ncm_config_index(ctx->data, &error);
-    ctx->usb_acm_config_index = get_usb_acm_config_index(ctx->primary, &error);
-    if (ctx->usb_interface_config_index < 0 || ctx->usb_acm_config_index < 0)
-    {
-        g_task_return_error (task, error);
-        g_object_unref (task);
-        return;
-    }
 
     /* Run! */
     dial_3gpp_context_step (task);
