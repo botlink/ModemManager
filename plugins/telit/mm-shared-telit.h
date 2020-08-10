@@ -32,6 +32,10 @@
 #define MM_SHARED_TELIT_GET_INTERFACE(obj)     (G_TYPE_INSTANCE_GET_INTERFACE ((obj), MM_TYPE_SHARED_TELIT, MMSharedTelit))
 
 typedef struct _MMSharedTelit MMSharedTelit;
+typedef void (*MMSharedTelitSetCurrentBands) (MMIfaceModem *self,
+                                              GArray *bands_array,
+                                              GAsyncReadyCallback callback,
+                                              gpointer user_data);
 
 struct _MMSharedTelit {
     GTypeInterface g_iface;
@@ -86,5 +90,11 @@ void        mm_shared_telit_modem_set_current_bands     (MMIfaceModem *self,
                                                          GArray *bands_array,
                                                          GAsyncReadyCallback callback,
                                                          gpointer user_data);
+
+void        mm_shared_telit_modem_disable_autoband       (MMIfaceModem *self,
+                                                          GArray *bands_array,
+                                                          GAsyncReadyCallback callback,
+                                                          MMSharedTelitSetCurrentBands set_current_bands,
+                                                          gpointer user_data);
 
 #endif  /* MM_SHARED_TELIT_H */
