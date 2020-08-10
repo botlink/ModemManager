@@ -334,6 +334,181 @@ mm_shared_telit_modem_set_current_bands (MMIfaceModem *self,
 }
 
 /*****************************************************************************/
+/* Disable Telit AUTOBND (auto band selection) */
+
+typedef enum {
+    DISABLE_AUTOBAND_STEP_FIRST,
+    DISABLE_AUTOBAND_STEP_CHECK_AUTOBND,
+    DISABLE_AUTOBAND_STEP_DISABLE_AUTOBND,
+    DISABLE_AUTOBAND_STEP_LAST,
+} DisableAutobandStep;
+
+typedef struct {
+    MMIfaceModem                *self;
+    DisableAutobandStep          step;
+    GArray                      *bands_array;
+    GAsyncReadyCallback          callback;
+    MMSharedTelitSetCurrentBands set_current_bands;
+    gpointer                     user_data;
+} DisableAutobandContext;
+
+static void
+disable_autoband_step (GTask *task);
+
+static void
+disable_autoband_context_free (DisableAutobandContext *ctx)
+{
+    g_object_unref (ctx->self);
+    g_slice_free (DisableAutobandContext, ctx);
+}
+
+static void
+mm_shared_telit_modem_check_autoband_ready (MMBaseModem *self,
+                                           GAsyncResult *res,
+                                           GTask *task)
+{
+    const gchar *response;
+    GError *error = NULL;
+    DisableAutobandContext *ctx;
+
+    ctx = (DisableAutobandContext *) g_task_get_task_data (task);
+
+    response = mm_base_modem_at_command_finish (self, res, &error);
+    if (error) {
+        mm_warn ("telit: failed to query if AUTOBND is enabled: %s",
+                 error->message);
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+    mm_info ("telit: AUTOBND is %s", response);
+
+    ctx->step++;
+    disable_autoband_step (task);
+}
+
+static void
+mm_shared_telit_modem_disable_autoband_ready (MMBaseModem *self,
+                                             GAsyncResult *res,
+                                             GTask *task)
+{
+    GError *error = NULL;
+    DisableAutobandContext *ctx;
+
+    ctx = (DisableAutobandContext *) g_task_get_task_data (task);
+
+    mm_base_modem_at_command_finish (self, res, &error);
+    if (error) {
+        mm_warn ("telit: failed to disable AUTOBND: %s", error->message);
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+    mm_info ("telit: disabled AUTOBND");
+
+    ctx->step++;
+    disable_autoband_step (task);
+}
+
+static void
+disable_autoband_step (GTask *task)
+{
+    DisableAutobandContext *ctx;
+
+    ctx = (DisableAutobandContext *) g_task_get_task_data (task);
+    switch (ctx->step) {
+    case DISABLE_AUTOBAND_STEP_FIRST:
+        ctx->step++;
+        /* fall down */
+
+    case DISABLE_AUTOBAND_STEP_CHECK_AUTOBND:
+        mm_dbg ("telit: checking if AUTOBND is enabled...");
+        mm_base_modem_at_command (MM_BASE_MODEM (ctx->self),
+                                  "AT#AUTOBND?",
+                                  20,
+                                  FALSE,
+                                  (GAsyncReadyCallback)mm_shared_telit_modem_check_autoband_ready,
+                                  task);
+        return;
+
+    case DISABLE_AUTOBAND_STEP_DISABLE_AUTOBND:
+        mm_dbg ("telit: disabling AUTOBND...");
+        mm_base_modem_at_command (MM_BASE_MODEM (ctx->self),
+                                  "AT#AUTOBND=0",
+                                  20,
+                                  FALSE,
+                                  (GAsyncReadyCallback)mm_shared_telit_modem_disable_autoband_ready,
+                                  task);
+        return;
+
+    case DISABLE_AUTOBAND_STEP_LAST:
+        g_task_return_boolean (task, TRUE);
+        g_object_unref (task);
+        return;
+    }
+
+    g_assert_not_reached ();
+}
+
+static gboolean
+disable_autoband_task_finish (MMIfaceModem  *self,
+                              GAsyncResult  *res,
+                              GError       **error)
+{
+    g_return_val_if_fail(g_task_is_valid(res, self), FALSE);
+
+    return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+static void
+disable_autoband_done (GObject  *source_object,
+                       GAsyncResult      *res,
+                       gpointer          data)
+{
+    MMIfaceModem *modem = (MMIfaceModem *) source_object;
+    DisableAutobandContext * ctx;
+    gboolean success;
+    GError *error = NULL;
+
+    success = disable_autoband_task_finish (modem, res, &error);
+
+    if (success)
+    {
+        ctx = (DisableAutobandContext *) data;
+
+        ctx->set_current_bands (ctx->self,
+                                ctx->bands_array,
+                                ctx->callback,
+                                ctx->user_data);
+    } else {
+        mm_warn ("telit: Got error disabling AUTOBND: %s", error->message);
+        g_error_free (error);
+    }
+}
+
+void
+mm_shared_telit_modem_disable_autoband (MMIfaceModem *self,
+                                        GArray *bands_array,
+                                        GAsyncReadyCallback callback,
+                                        MMSharedTelitSetCurrentBands set_current_bands,
+                                        gpointer user_data)
+{
+    DisableAutobandContext *ctx;
+    GTask *task;
+    ctx = g_slice_new0 (DisableAutobandContext);
+    ctx->self = g_object_ref (self);
+    ctx->step = DISABLE_AUTOBAND_STEP_FIRST;
+    ctx->bands_array = bands_array;
+    ctx->callback = callback;
+    ctx->set_current_bands = set_current_bands;
+    ctx->user_data = user_data;
+
+    task = g_task_new (self, NULL, disable_autoband_done, ctx);
+    g_task_set_task_data (task, ctx,
+                          (GDestroyNotify) disable_autoband_context_free);
+    disable_autoband_step (task);
+}
+/*****************************************************************************/
 /* Set current modes (Modem interface) */
 
 gboolean
