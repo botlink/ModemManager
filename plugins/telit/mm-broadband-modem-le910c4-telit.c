@@ -22,6 +22,7 @@
 #include "mm-base-modem-at.h"
 #include "mm-modem-helpers-telit.h"
 #include "mm-shared-qmi.h"
+#include "mm-shared-telit.h"
 
 /* index to use with AT#FWSWITCH to select firmware */
 #define NON_VERIZON_FIRMWARE_INDEX 0
@@ -77,10 +78,20 @@ mm_firmware_change_register_task_telit_start (MMIfaceModem3gpp    *self,
                                               GAsyncReadyCallback callback,
                                               gpointer            user_data);
 
+static void
+set_current_bands (MMIfaceModem        *self,
+                   GArray              *bands_array,
+                   GAsyncReadyCallback  callback,
+                   gpointer             user_data);
+
+static void iface_modem_init (MMIfaceModem *iface);
 static void iface_modem_3gpp_init (MMIfaceModem3gpp *iface);
+static void shared_telit_init (MMSharedTelit *iface);
 
 G_DEFINE_TYPE_EXTENDED (MMBroadbandModemLe910c4Telit, mm_broadband_modem_le910c4_telit, MM_TYPE_BROADBAND_MODEM_QMI, 0,
-                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM_3GPP, iface_modem_3gpp_init));
+                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM, iface_modem_init)
+                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM_3GPP, iface_modem_3gpp_init)
+                        G_IMPLEMENT_INTERFACE (MM_TYPE_SHARED_TELIT, shared_telit_init));
 
 /*****************************************************************************/
 
@@ -106,9 +117,20 @@ mm_broadband_modem_le910c4_telit_init (MMBroadbandModemLe910c4Telit *self)
 }
 
 static void
+iface_modem_init (MMIfaceModem *iface)
+{
+    iface->set_current_bands = set_current_bands;
+}
+
+static void
 iface_modem_3gpp_init (MMIfaceModem3gpp *iface)
 {
     iface->register_in_network = mm_firmware_change_register_task_telit_start;
+}
+
+static void
+shared_telit_init (MMSharedTelit *iface)
+{
 }
 
 static void
@@ -409,4 +431,18 @@ mm_firmware_change_register_task_telit_start (MMIfaceModem3gpp    *self,
     task = g_task_new (self, NULL, firmware_steps_done, ctx);
     g_task_set_task_data (task, ctx, (GDestroyNotify) firmware_change_register_context_free);
     firmware_change_register_step (task);
+}
+
+static void
+set_current_bands (MMIfaceModem        *self,
+                   GArray              *bands_array,
+                   GAsyncReadyCallback  callback,
+                   gpointer             user_data)
+{
+    /* Disable Telit AUTOBND when setting bands manually */
+    mm_shared_telit_modem_disable_autoband (self,
+                                            bands_array,
+                                            callback,
+                                            mm_shared_qmi_set_current_bands,
+                                            user_data);
 }

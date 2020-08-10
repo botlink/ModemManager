@@ -1330,6 +1330,19 @@ modem_3gpp_enable_unsolicited_events (MMIfaceModem3gpp    *self,
         task);
 }
 
+static void
+set_current_bands (MMIfaceModem        *self,
+                   GArray              *bands_array,
+                   GAsyncReadyCallback  callback,
+                   gpointer             user_data)
+{
+    /* Disable Telit AUTOBND when setting bands manually */
+    mm_shared_telit_modem_disable_autoband (self,
+                                            bands_array,
+                                            callback,
+                                            mm_shared_telit_modem_set_current_bands,
+                                            user_data);
+}
 /*****************************************************************************/
 
 MMBroadbandModemTelit *
@@ -1368,7 +1381,7 @@ iface_modem_init (MMIfaceModem *iface)
 {
     iface_modem_parent = g_type_interface_peek_parent (iface);
 
-    iface->set_current_bands = mm_shared_telit_modem_set_current_bands;
+    iface->set_current_bands = set_current_bands;
     iface->set_current_bands_finish = mm_shared_telit_modem_set_current_bands_finish;
     iface->load_current_bands = mm_shared_telit_modem_load_current_bands;
     iface->load_current_bands_finish = mm_shared_telit_modem_load_current_bands_finish;
