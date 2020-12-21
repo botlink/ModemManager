@@ -187,9 +187,9 @@ firmware_check_ready (MMBaseModem  *self,
         mm_warn ("telit: couldn't parse fwswitch response '%s': %s", response, error->message);
         g_error_free (error);
     } else {
-        mm_dbg("telit: firmware index %d, storage type %d",
-               firmware_index, storage_type);
-        ctx->verizon_firmware_loaded = (firmware_index == 1);
+        mm_info ("telit: firmware index %d, storage type %d",
+                 firmware_index, storage_type);
+        ctx->verizon_firmware_loaded = (firmware_index == VERIZON_FIRMWARE_INDEX);
     }
 
     ctx->step++;
@@ -418,6 +418,7 @@ mm_firmware_change_register_task_telit_start (MMIfaceModem3gpp    *self,
     FirmwareChangeRegisterContext *ctx;
     GTask                         *task;
 
+    mm_dbg ("telit: Starting firmware change task");
     ctx = g_slice_new0 (FirmwareChangeRegisterContext);
     ctx->self = g_object_ref (self);
     ctx->step = FIRMWARE_CHANGE_REGISTER_STEP_FIRST;
