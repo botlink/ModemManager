@@ -16,8 +16,8 @@
 
 #include <config.h>
 
+#include "mm-log-object.h"
 #include "mm-broadband-modem-le910c4-telit.h"
-#include "mm-log.h"
 #include "mm-iface-modem-3gpp.h"
 #include "mm-base-modem-at.h"
 #include "mm-modem-helpers-telit.h"
@@ -187,9 +187,9 @@ firmware_check_ready (MMBaseModem  *self,
         mm_obj_warn (self, "telit: couldn't parse fwswitch response '%s': %s", response, error->message);
         g_error_free (error);
     } else {
-        mm_obj_dbg (self, "telit: firmware index %d, storage type %d",
+        mm_obj_info (self, "telit: firmware index %d, storage type %d",
                firmware_index, storage_type);
-        ctx->verizon_firmware_loaded = (firmware_index == 1);
+        ctx->verizon_firmware_loaded = (firmware_index == VERIZON_FIRMWARE_INDEX);
     }
 
     ctx->step++;
@@ -419,6 +419,7 @@ mm_firmware_change_register_task_telit_start (MMIfaceModem3gpp    *self,
     FirmwareChangeRegisterContext *ctx;
     GTask                         *task;
 
+    mm_obj_dbg (self, "telit: Starting firmware change task");
     ctx = g_slice_new0 (FirmwareChangeRegisterContext);
     ctx->self = g_object_ref (self);
     ctx->step = FIRMWARE_CHANGE_REGISTER_STEP_FIRST;
