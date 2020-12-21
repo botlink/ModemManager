@@ -126,6 +126,8 @@ static void
 iface_modem_3gpp_init (MMIfaceModem3gpp *iface)
 {
     iface->register_in_network = mm_firmware_change_register_task_telit_start;
+    iface->set_initial_eps_bearer_settings = mm_shared_telit_set_initial_eps_bearer_settings;
+    iface->set_initial_eps_bearer_settings_finish = mm_shared_telit_set_initial_eps_bearer_settings_finish;
 }
 
 static void
