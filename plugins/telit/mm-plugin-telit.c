@@ -59,14 +59,14 @@ create_modem (MMPlugin *self,
         // TODO(cgrahn): Better way to determine if modem is LE910C4. The check
         // below matches more than the LE910C4.
         if (vendor == 0x1bc7 && product == 0x1201) {
-            mm_obj_dbg (self, "QMI-powered Telit LE910C4 modem found...");
+            mm_obj_info (self, "QMI-powered Telit LE910C4 modem found...");
             return MM_BASE_MODEM (mm_broadband_modem_le910c4_telit_new (uid,
                                                                         drivers,
                                                                         mm_plugin_get_name (self),
                                                                         vendor,
                                                                         product));
         } else {
-            mm_obj_dbg (self, "QMI-powered Telit modem found...");
+            mm_obj_info (self, "QMI-powered Telit modem found...");
             return MM_BASE_MODEM (mm_broadband_modem_qmi_new (uid,
                                                               drivers,
                                                               mm_plugin_get_name (self),
@@ -78,7 +78,7 @@ create_modem (MMPlugin *self,
 
 #if defined WITH_MBIM
     if (mm_port_probe_list_has_mbim_port (probes)) {
-        mm_obj_dbg (self, "MBIM-powered Telit modem found...");
+        mm_obj_info (self, "MBIM-powered Telit modem found...");
         return MM_BASE_MODEM (mm_broadband_modem_mbim_telit_new (uid,
                                                                  drivers,
                                                                  mm_plugin_get_name (self),
@@ -87,6 +87,7 @@ create_modem (MMPlugin *self,
     }
 #endif
 
+    mm_obj_dbg (self, "Non-QMI, non-MBIM Telit modem found...");
     return MM_BASE_MODEM (mm_broadband_modem_telit_new (uid,
                                                         drivers,
                                                         mm_plugin_get_name (self),
