@@ -511,6 +511,29 @@ mm_shared_telit_modem_disable_autoband (MMIfaceModem *self,
 
 /*****************************************************************************/
 /* Set initial EPS bearer settings */
+typedef enum {
+    SET_INITIAL_EPS_STEP_FIRST,
+    SET_INITIAL_EPS_STEP_CHECK_VERIZON_SIM,
+    SET_INITIAL_EPS_STEP_CHANGE_APN,
+    SET_INITIAL_EPS_STEP_LAST,
+} SetInitialEpsBearerSettingsStep;
+
+typedef struct {
+    MMIfaceModem3gpp                *self;
+    MMBearerProperties              *config;
+    SetInitialEpsBearerSettingsStep  step;
+} SetInitialEpsBearerSettingsContext;
+
+static void
+set_initial_eps_bearer_settings_step (GTask *task);
+
+static void
+set_initial_eps_bearer_settings_context_free (SetInitialEpsBearerSettingsContext *ctx)
+{
+    g_object_unref (ctx->self);
+    g_object_unref (ctx->config);
+    g_slice_free (SetInitialEpsBearerSettingsContext, ctx);
+}
 
 gboolean
 mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem3gpp  *self,
@@ -521,15 +544,15 @@ mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem3gpp  *self,
 }
 
 static void
-mm_shared_telit_set_initial_eps_bearer_settings_ready (MMBaseModem *self,
-                                                       GAsyncResult *res,
-                                                       GTask *task)
+set_initial_eps_bearer_apn_ready (MMBaseModem *self,
+                                  GAsyncResult *res,
+                                  GTask *task)
 {
+    SetInitialEpsBearerSettingsContext *ctx;
     GError             *error = NULL;
-    MMBearerProperties *config;
     const gchar        *apn;
 
-    config = (MMBearerProperties *) g_task_get_task_data (task);
+    ctx = (SetInitialEpsBearerSettingsContext *) g_task_get_task_data (task);
 
     mm_base_modem_at_command_finish (self, res, &error);
     if (error) {
@@ -538,29 +561,25 @@ mm_shared_telit_set_initial_eps_bearer_settings_ready (MMBaseModem *self,
         g_object_unref (task);
         return;
     }
-    apn = mm_bearer_properties_get_apn (config);
+    apn = mm_bearer_properties_get_apn (ctx->config);
     mm_info ("telit: set APN for initial EPS bearer to %s", apn);
 
-    g_task_return_boolean (task, TRUE);
+    ctx->step++;
+    set_initial_eps_bearer_settings_step (task);
 }
 
-void
-mm_shared_telit_set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
-                                                 MMBearerProperties *config,
-                                                 GAsyncReadyCallback callback,
-                                                 gpointer user_data)
+static void
+set_initial_eps_bearer_apn (GTask *task)
 {
-    GTask                *task;
+    SetInitialEpsBearerSettingsContext *ctx;
     const gchar          *apn;
     gchar                *quoted_apn;
     gchar                *cmd;
     /* TODO(cgrahn): Link to Telit documentation showing PDP CID 1 is for EPS bearer */
     const guint8          default_bearer_cid = 1;
 
-    task = g_task_new (self, NULL, callback, user_data);
-    g_task_set_task_data (task, g_object_ref (config), g_object_unref);
-
-    apn = mm_bearer_properties_get_apn (config);
+    ctx = (SetInitialEpsBearerSettingsContext *) g_task_get_task_data (task);
+    apn = mm_bearer_properties_get_apn (ctx->config);
     if (!apn) {
         g_task_return_new_error (task, MM_CORE_ERROR, MM_CORE_ERROR_INVALID_ARGS,
                                  "APN missing from config");
@@ -570,16 +589,68 @@ mm_shared_telit_set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
 
     quoted_apn = mm_port_serial_at_quote_string (apn);
     /* TODO(cgrahn): Don't hardcode pdptype ("IPV4V6")? */
-    cmd = g_strdup_printf ("AT+CGDCONT=%u,\"%s\",%s", default_bearer_cid, "IPV4V6", quoted_apn);
+    cmd = g_strdup_printf ("AT+CGDCONT=%u,\"%s\",%s", default_bearer_cid,
+                           "IPV4V6", quoted_apn);
     g_free (quoted_apn);
 
-    mm_base_modem_at_command (MM_BASE_MODEM (self),
+    mm_base_modem_at_command (MM_BASE_MODEM (ctx->self),
                               cmd,
                               5,
                               FALSE,
-                              (GAsyncReadyCallback)mm_shared_telit_set_initial_eps_bearer_settings_ready,
+                              (GAsyncReadyCallback)set_initial_eps_bearer_apn_ready,
                               task);
     g_free (cmd);
+}
+
+static void
+set_initial_eps_bearer_settings_step (GTask *task)
+{
+    SetInitialEpsBearerSettingsContext *ctx;
+
+    ctx = (SetInitialEpsBearerSettingsContext *) g_task_get_task_data (task);
+    switch (ctx->step) {
+    case SET_INITIAL_EPS_STEP_FIRST:
+        ctx->step++;
+        /* fall through */
+
+    case SET_INITIAL_EPS_STEP_CHECK_VERIZON_SIM:
+        ctx->step++;
+        /* TODO */
+        /* fall through */
+
+    case SET_INITIAL_EPS_STEP_CHANGE_APN:
+        set_initial_eps_bearer_apn (task);
+        return;
+
+    case SET_INITIAL_EPS_STEP_LAST:
+        g_task_return_boolean (task, TRUE);
+        g_object_unref (task);
+        return;
+
+    default:
+        g_assert_not_reached ();
+    }
+}
+
+void
+mm_shared_telit_set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
+                                                 MMBearerProperties *config,
+                                                 GAsyncReadyCallback callback,
+                                                 gpointer user_data)
+{
+    SetInitialEpsBearerSettingsContext *ctx;
+    GTask                              *task;
+
+    ctx = g_slice_new0 (SetInitialEpsBearerSettingsContext);
+    ctx->self = g_object_ref (self);
+    ctx->config = g_object_ref (config);
+    ctx->step = SET_INITIAL_EPS_STEP_FIRST;
+
+    task = g_task_new (self, NULL, callback, user_data);
+    g_task_set_task_data (task, ctx,
+                          (GDestroyNotify) set_initial_eps_bearer_settings_context_free);
+
+    set_initial_eps_bearer_settings_step (task);
 }
 
 /*****************************************************************************/
