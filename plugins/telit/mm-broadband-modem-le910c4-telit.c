@@ -41,6 +41,12 @@ set_current_bands (MMIfaceModem        *self,
                    GAsyncReadyCallback  callback,
                    gpointer             user_data);
 
+static void
+set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
+                                 MMBearerProperties *config,
+                                 GAsyncReadyCallback callback,
+                                 gpointer user_data);
+
 static void iface_modem_init (MMIfaceModem *iface);
 static void iface_modem_3gpp_init (MMIfaceModem3gpp *iface);
 static void shared_telit_init (MMSharedTelit *iface);
@@ -83,7 +89,7 @@ static void
 iface_modem_3gpp_init (MMIfaceModem3gpp *iface)
 {
     iface->register_in_network = mm_firmware_change_register_task_telit_start;
-    iface->set_initial_eps_bearer_settings = mm_shared_telit_set_initial_eps_bearer_settings;
+    iface->set_initial_eps_bearer_settings = set_initial_eps_bearer_settings;
     iface->set_initial_eps_bearer_settings_finish = mm_shared_telit_set_initial_eps_bearer_settings_finish;
 }
 
@@ -109,6 +115,7 @@ typedef enum {
 
 typedef struct {
     MMIfaceModem3gpp    *self;
+    MMBearerProperties  *config;
     CreateBearerStep     step;
     gboolean             verizon_firmware_loaded;
     const gchar         *operator_id;
@@ -121,6 +128,9 @@ static void
 firmware_change_register_context_free (FirmwareChangeRegisterContext *ctx)
 {
     g_object_unref (ctx->self);
+    if (ctx->config) {
+        g_object_unref (ctx->config);
+    }
     g_slice_free (FirmwareChangeRegisterContext, ctx);
 }
 
@@ -176,7 +186,7 @@ change_firmware_ready (MMBaseModem  *self,
         // abort task here as the modem is going to reboot
         // and ModemManager will need to reenumerate the modem
         error = g_error_new (MM_CORE_ERROR,
-                             MM_CORE_ERROR_FAILED,
+                             MM_CORE_ERROR_ABORTED,
                              "Modem firmware change in progress. "
                              "Please wait for modem to reboot.");
         g_task_return_error (task, error);
@@ -296,6 +306,12 @@ firmware_steps_done (GObject  *source_object,
     GError *error = NULL;
 
     ctx = (FirmwareChangeRegisterContext *) data;
+    if (g_task_had_error (G_TASK (res))) {
+        /* Call the callback saved in ctx to propagate the error. */
+        ctx->callback (source_object, res, ctx->user_data);
+        return;
+    }
+
     success = bearer_task_telit_finish (modem, res, &error);
 
     if (success)
@@ -306,6 +322,8 @@ firmware_steps_done (GObject  *source_object,
                                                 ctx->callback,
                                                 ctx->user_data);
     } else {
+        /* TODO(cgrahn): This branch is unreachable as firmware task
+         * always returns either TRUE or an error. */
         mm_obj_warn (ctx->self, "telit: Got error registering: %s", error->message);
         g_error_free (error);
     }
@@ -324,6 +342,7 @@ mm_firmware_change_register_task_telit_start (MMIfaceModem3gpp    *self,
     mm_obj_dbg (self, "telit: Starting firmware change task");
     ctx = g_slice_new0 (FirmwareChangeRegisterContext);
     ctx->self = g_object_ref (self);
+    ctx->config = NULL;
     ctx->step = FIRMWARE_CHANGE_REGISTER_STEP_FIRST;
     ctx->verizon_firmware_loaded = FALSE;
     ctx->operator_id = operator_id;
@@ -348,4 +367,71 @@ set_current_bands (MMIfaceModem        *self,
                                             callback,
                                             mm_shared_qmi_set_current_bands,
                                             user_data);
+}
+
+static void
+set_initial_eps_bearer_settings_firmware_steps_done (GObject  *source_object,
+                                                     GAsyncResult      *res,
+                                                     gpointer          data)
+{
+    MMIfaceModem3gpp *modem = (MMIfaceModem3gpp *) source_object;
+    FirmwareChangeRegisterContext *ctx;
+    gboolean success;
+    GError *error = NULL;
+
+    ctx = (FirmwareChangeRegisterContext *) data;
+    if (g_task_had_error (G_TASK (res))) {
+        /* Call the callback saved in ctx to propagate the error. */
+        ctx->callback (source_object, res, ctx->user_data);
+        return;
+    }
+
+    success = bearer_task_telit_finish (modem, res, &error);
+
+    if (success)
+    {
+        /* Modem is using correct firmware. Now we can set the APN for
+         * the initial EPS bearer. */
+        mm_shared_telit_set_initial_eps_bearer_settings (ctx->self,
+                                                         ctx->config,
+                                                         ctx->callback,
+                                                         ctx->user_data);
+    } else {
+        /* TODO(cgrahn): This branch is unreachable as firmware task
+         * always returns either TRUE or an error. */
+        mm_obj_warn (ctx->self, "telit: Got error setting initial "
+                     "EPS bearer settings: %s", error->message);
+        g_error_free (error);
+    }
+}
+
+/* This function makes sure the modem is using the correct firmware
+ * before setting the APN for the initial EPS Bearer */
+static void
+set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
+                                 MMBearerProperties *config,
+                                 GAsyncReadyCallback callback,
+                                 gpointer user_data)
+{
+    FirmwareChangeRegisterContext *ctx;
+    GTask                         *task;
+
+    mm_obj_dbg (self,
+                "telit le910c4: Starting initial eps bearer settings task");
+    ctx = g_slice_new0 (FirmwareChangeRegisterContext);
+    ctx->self = g_object_ref (self);
+    ctx->config = g_object_ref (config);
+    ctx->step = FIRMWARE_CHANGE_REGISTER_STEP_FIRST;
+    ctx->verizon_firmware_loaded = FALSE;
+    ctx->operator_id = NULL;
+    ctx->cancellable = NULL;
+    ctx->callback = callback;
+    ctx->user_data = user_data;
+
+    task = g_task_new (self, NULL,
+                       set_initial_eps_bearer_settings_firmware_steps_done,
+                       ctx);
+    g_task_set_task_data (task, ctx,
+                          (GDestroyNotify) firmware_change_register_context_free);
+    firmware_change_register_step (task);
 }
