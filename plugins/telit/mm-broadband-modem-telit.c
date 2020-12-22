@@ -1140,6 +1140,8 @@ iface_modem_3gpp_init (MMIfaceModem3gpp *iface)
 
     iface->enable_unsolicited_events = modem_3gpp_enable_unsolicited_events;
     iface->enable_unsolicited_events_finish = modem_3gpp_enable_unsolicited_events_finish;
+    iface->set_initial_eps_bearer_settings = mm_shared_telit_set_initial_eps_bearer_settings;
+    iface->set_initial_eps_bearer_settings_finish = mm_shared_telit_set_initial_eps_bearer_settings_finish;
 }
 
 static void

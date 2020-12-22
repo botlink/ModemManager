@@ -508,6 +508,80 @@ mm_shared_telit_modem_disable_autoband (MMIfaceModem *self,
                           (GDestroyNotify) disable_autoband_context_free);
     disable_autoband_step (task);
 }
+
+/*****************************************************************************/
+/* Set initial EPS bearer settings */
+
+gboolean
+mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem3gpp  *self,
+                                                        GAsyncResult      *res,
+                                                        GError           **error)
+{
+    return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+static void
+mm_shared_telit_set_initial_eps_bearer_settings_ready (MMBaseModem *self,
+                                                       GAsyncResult *res,
+                                                       GTask *task)
+{
+    GError             *error = NULL;
+    MMBearerProperties *config;
+    const gchar        *apn;
+
+    config = (MMBearerProperties *) g_task_get_task_data (task);
+
+    mm_base_modem_at_command_finish (self, res, &error);
+    if (error) {
+        mm_warn ("telit: failed to set intial EPS bearer settings: %s", error->message);
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+    apn = mm_bearer_properties_get_apn (config);
+    mm_info ("telit: set APN for initial EPS bearer to %s", apn);
+
+    g_task_return_boolean (task, TRUE);
+}
+
+void
+mm_shared_telit_set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
+                                                 MMBearerProperties *config,
+                                                 GAsyncReadyCallback callback,
+                                                 gpointer user_data)
+{
+    GTask                *task;
+    const gchar          *apn;
+    gchar                *quoted_apn;
+    gchar                *cmd;
+    /* TODO(cgrahn): Link to Telit documentation showing PDP CID 1 is for EPS bearer */
+    const guint8          default_bearer_cid = 1;
+
+    task = g_task_new (self, NULL, callback, user_data);
+    g_task_set_task_data (task, g_object_ref (config), g_object_unref);
+
+    apn = mm_bearer_properties_get_apn (config);
+    if (!apn) {
+        g_task_return_new_error (task, MM_CORE_ERROR, MM_CORE_ERROR_INVALID_ARGS,
+                                 "APN missing from config");
+        g_object_unref (task);
+        return;
+    }
+
+    quoted_apn = mm_port_serial_at_quote_string (apn);
+    /* TODO(cgrahn): Don't hardcode pdptype ("IPV4V6")? */
+    cmd = g_strdup_printf ("AT+CGDCONT=%u,\"%s\",%s", default_bearer_cid, "IPV4V6", quoted_apn);
+    g_free (quoted_apn);
+
+    mm_base_modem_at_command (MM_BASE_MODEM (self),
+                              cmd,
+                              5,
+                              FALSE,
+                              (GAsyncReadyCallback)mm_shared_telit_set_initial_eps_bearer_settings_ready,
+                              task);
+    g_free (cmd);
+}
+
 /*****************************************************************************/
 /* Set current modes (Modem interface) */
 

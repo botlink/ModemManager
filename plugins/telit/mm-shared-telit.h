@@ -25,6 +25,7 @@
 #include "mm-broadband-modem.h"
 #include "mm-iface-modem.h"
 #include "mm-iface-modem-location.h"
+#include "mm-iface-modem-3gpp.h"
 
 #define MM_TYPE_SHARED_TELIT                   (mm_shared_telit_get_type ())
 #define MM_SHARED_TELIT(obj)                   (G_TYPE_CHECK_INSTANCE_CAST ((obj), MM_TYPE_SHARED_TELIT, MMSharedTelit))
@@ -92,5 +93,14 @@ void        mm_shared_telit_modem_disable_autoband       (MMIfaceModem *self,
                                                           GAsyncReadyCallback callback,
                                                           MMSharedTelitSetCurrentBands set_current_bands,
                                                           gpointer user_data);
+
+void        mm_shared_telit_set_initial_eps_bearer_settings        (MMIfaceModem3gpp *self,
+                                                                    MMBearerProperties *config,
+                                                                    GAsyncReadyCallback callback,
+                                                                    gpointer user_data);
+
+gboolean    mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem3gpp  *self,
+                                                                    GAsyncResult      *res,
+                                                                    GError           **error);
 
 #endif  /* MM_SHARED_TELIT_H */
