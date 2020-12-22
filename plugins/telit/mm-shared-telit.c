@@ -565,6 +565,39 @@ mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem3gpp  *self,
 }
 
 static void
+set_initial_eps_bearer_check_verizon_sim (GTask *task)
+{
+    /* Determine if modem is using a Verizon SIM */
+    SetInitialEpsBearerSettingsContext *ctx;
+    GError      *error = NULL;
+    const gchar *imsi;
+
+    ctx = (SetInitialEpsBearerSettingsContext *) g_task_get_task_data (task);
+    imsi = mm_shared_telit_read_imsi (MM_IFACE_MODEM (ctx->self),
+                                      &error);
+    if (imsi) {
+        if (mm_shared_is_verizon_sim (imsi, ctx->self)) {
+            mm_obj_warn (ctx->self, "Verizon SIM found, "
+                         "refusing to set initial EPS bearer APN");
+            g_task_return_new_error (task, MM_CORE_ERROR, MM_CORE_ERROR_ABORTED,
+                                     "Verizon SIM found, "
+                                     "refusing to set initial EPS bearer APN");
+            g_object_unref (task);
+            return;
+        } else {
+            mm_obj_info (ctx->self, "non-Verizon SIM found, "
+                         "setting initial EPS bearer APN");
+            ctx->step++;
+            set_initial_eps_bearer_settings_step (task);
+        }
+    } else {
+        g_task_return_error (task, error);
+        g_object_unref (task);
+        return;
+    }
+}
+
+static void
 set_initial_eps_bearer_apn_ready (MMBaseModem *self,
                                   GAsyncResult *res,
                                   GTask *task)
@@ -635,9 +668,8 @@ set_initial_eps_bearer_settings_step (GTask *task)
         /* fall through */
 
     case SET_INITIAL_EPS_STEP_CHECK_VERIZON_SIM:
-        ctx->step++;
-        /* TODO */
-        /* fall through */
+        set_initial_eps_bearer_check_verizon_sim (task);
+        return;
 
     case SET_INITIAL_EPS_STEP_CHANGE_APN:
         set_initial_eps_bearer_apn (task);
@@ -672,6 +704,109 @@ mm_shared_telit_set_initial_eps_bearer_settings (MMIfaceModem3gpp *self,
                           (GDestroyNotify) set_initial_eps_bearer_settings_context_free);
 
     set_initial_eps_bearer_settings_step (task);
+}
+
+/*****************************************************************************/
+/* Utility functions */
+const gchar *
+mm_shared_telit_read_imsi (MMIfaceModem  *self,
+                           GError **error)
+{
+    GError    *inner_error = NULL;
+    MMBaseSim *sim = NULL;
+    g_object_get (self,
+                  MM_IFACE_MODEM_SIM, &sim,
+                  NULL);
+
+    if (!sim) {
+        mm_obj_warn (self, "telit: SIM not found");
+        inner_error = g_error_new (MM_CORE_ERROR,
+                                   MM_CORE_ERROR_FAILED,
+                                   "Couldn't retrieve SIM object for Telit modem.");
+
+    }
+    else {
+        const char *imsi;
+        imsi = mm_gdbus_sim_get_imsi (MM_GDBUS_SIM (sim));
+        if (!imsi) {
+            mm_obj_warn (self, "telit: Unable to get IMSI from SIM");
+            inner_error = g_error_new (MM_CORE_ERROR,
+                                       MM_CORE_ERROR_FAILED,
+                                       "Couldn't read IMSI from SIM object.");
+        } else {
+            mm_obj_dbg (self, "telit: imsi is %s", imsi);
+            g_object_unref (sim);
+            return imsi;
+        }
+        g_object_unref (sim);
+    }
+
+    if (inner_error) {
+        g_propagate_error(error, inner_error);
+        g_prefix_error(error, "Failed to get IMSI. ");
+        return NULL;
+    }
+
+    return NULL;
+}
+
+gboolean
+mm_shared_is_verizon_sim (const gchar *imsi,
+                          gpointer log_object)
+{
+/* List of mccmnc for Verizon from https://www.mcc-mnc.com/ */
+    static const gchar * const verizon_list[] = {
+        "311273",
+        "311289",
+        "311278",
+        "311483",
+        "310004",
+        "311283",
+        "311488",
+        "310890",
+        "311272",
+        "311288",
+        "311277",
+        "311482",
+        "311282",
+        "311487",
+        "310590",
+        "311271",
+        "311287",
+        "311276",
+        "311481",
+        "311281",
+        "311486",
+        "310013",
+        "311270",
+        "311286",
+        "311275",
+        "311480",
+        "311280",
+        "311485",
+        "310012",
+        "311110",
+        "311285",
+        "311274",
+        "311390",
+        "311279",
+        "311484",
+        "310010",
+        "311284",
+        "311489",
+        "310910",
+    };
+
+    guint i;
+    for (i = 0; i < G_N_ELEMENTS (verizon_list); i++) {
+        if (g_str_has_prefix (imsi, verizon_list[i])) {
+            mm_obj_dbg (log_object, "telit: found Verizon SIM. imsi is %s, mccmnc is %s",
+                        imsi, verizon_list[i]);
+            return TRUE;
+        }
+    }
+    mm_obj_dbg (log_object, "telit: did not find Verizon SIM");
+    return FALSE;
 }
 
 /*****************************************************************************/
