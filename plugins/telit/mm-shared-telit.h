@@ -103,4 +103,8 @@ gboolean    mm_shared_telit_set_initial_eps_bearer_settings_finish (MMIfaceModem
                                                                     GAsyncResult      *res,
                                                                     GError           **error);
 
+const gchar * mm_shared_telit_read_imsi (MMIfaceModem  *self,
+                                         GError **error);
+
+gboolean      mm_shared_is_verizon_sim  (const gchar *imsi);
 #endif  /* MM_SHARED_TELIT_H */
