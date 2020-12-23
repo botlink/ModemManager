@@ -577,19 +577,15 @@ set_initial_eps_bearer_check_verizon_sim (GTask *task)
                                       &error);
     if (imsi) {
         if (mm_shared_is_verizon_sim (imsi, ctx->self)) {
-            mm_obj_warn (ctx->self, "Verizon SIM found, "
-                         "refusing to set initial EPS bearer APN");
-            g_task_return_new_error (task, MM_CORE_ERROR, MM_CORE_ERROR_ABORTED,
-                                     "Verizon SIM found, "
-                                     "refusing to set initial EPS bearer APN");
-            g_object_unref (task);
-            return;
+            mm_obj_info (ctx->self, "Verizon SIM found, "
+                         "setting initial EPS bearer APN to 'vzwims'");
+            mm_bearer_properties_set_apn (ctx->config, "vzwims");
         } else {
             mm_obj_info (ctx->self, "non-Verizon SIM found, "
                          "setting initial EPS bearer APN");
-            ctx->step++;
-            set_initial_eps_bearer_settings_step (task);
         }
+        ctx->step++;
+        set_initial_eps_bearer_settings_step (task);
     } else {
         g_task_return_error (task, error);
         g_object_unref (task);
