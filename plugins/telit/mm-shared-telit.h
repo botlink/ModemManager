@@ -98,6 +98,15 @@ void        mm_shared_telit_modem_disable_autoband       (MMIfaceModem *self,
                                                           MMSharedTelitSetCurrentBands set_current_bands,
                                                           gpointer user_data);
 
+gboolean    mm_shared_telit_modem_power_off_finish (MMIfaceModem  *self,
+                                                    GAsyncResult  *res,
+                                                    GError       **error);
+
+void        mm_shared_telit_modem_power_off (MMIfaceModem        *self,
+                                             GAsyncReadyCallback  callback,
+                                             gpointer             user_data);
+
+
 void        mm_shared_telit_set_initial_eps_bearer_settings        (MMIfaceModem3gpp *self,
                                                                     MMBearerProperties *config,
                                                                     GAsyncReadyCallback callback,

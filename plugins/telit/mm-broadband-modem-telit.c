@@ -1472,6 +1472,8 @@ iface_modem_init (MMIfaceModem *iface)
     iface->modem_after_power_up_finish = modem_after_power_up_finish;
     iface->modem_power_down = modem_power_down;
     iface->modem_power_down_finish = modem_power_down_finish;
+    iface->modem_power_off = mm_shared_telit_modem_power_off;
+    iface->modem_power_off_finish = mm_shared_telit_modem_power_off_finish;
     iface->load_access_technologies = load_access_technologies;
     iface->load_access_technologies_finish = load_access_technologies_finish;
     iface->load_supported_modes = load_supported_modes;

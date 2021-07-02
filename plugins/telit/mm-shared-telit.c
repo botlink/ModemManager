@@ -805,6 +805,46 @@ mm_shared_is_verizon_sim (const gchar *imsi,
     return FALSE;
 }
 
+gboolean
+mm_shared_telit_modem_power_off_finish (MMIfaceModem  *self,
+                                        GAsyncResult  *res,
+                                        GError       **error)
+{
+    return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+static void
+modem_power_off_ready (MMBaseModem *self,
+                                       GAsyncResult *res,
+                                       GTask *task)
+{
+    GError *error = NULL;
+
+    if (!mm_base_modem_at_command_finish (self, res, &error)) {
+        g_task_return_error (task, error);
+    } else {
+        g_task_return_boolean (task, TRUE);
+    }
+    g_object_unref (task);
+}
+
+void
+mm_shared_telit_modem_power_off (MMIfaceModem        *self,
+                                 GAsyncReadyCallback  callback,
+                                 gpointer             user_data)
+{
+    GTask  *task;
+
+    task = g_task_new (self, NULL, callback, user_data);
+
+    mm_base_modem_at_command (MM_BASE_MODEM (self),
+                              "AT#SHDN",
+                              30,
+                              FALSE,
+                              (GAsyncReadyCallback) modem_power_off_ready,
+                              task);
+}
+
 /*****************************************************************************/
 /* Set current modes (Modem interface) */
 

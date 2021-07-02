@@ -82,6 +82,8 @@ mm_broadband_modem_le910c4_telit_init (MMBroadbandModemLe910c4Telit *self)
 static void
 iface_modem_init (MMIfaceModem *iface)
 {
+    iface->modem_power_off = mm_shared_telit_modem_power_off;
+    iface->modem_power_off_finish = mm_shared_telit_modem_power_off_finish;
     iface->set_current_bands = set_current_bands;
 }
 
